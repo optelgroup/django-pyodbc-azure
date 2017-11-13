@@ -226,7 +226,7 @@ class DatabaseOperations(BaseDatabaseOperations):
         Returns the FOR UPDATE SQL clause to lock rows for an update operation.
         """
         if skip_locked:
-            return 'WITH (ROWLOCK, UPDLOCK, READPAST)'
+            return 'WITH (NOLOCK)'
         elif nowait:
             return 'WITH (NOWAIT, ROWLOCK, UPDLOCK)'
         else:
