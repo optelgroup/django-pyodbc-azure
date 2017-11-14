@@ -32,7 +32,7 @@ Dependencies
 ------------
 
 -  Django 1.8.14
--  pyodbc 3.0 or newer
+-  pyodbc 3.0.10 or newer
 
 Installation
 ------------
