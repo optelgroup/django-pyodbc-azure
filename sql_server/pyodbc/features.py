@@ -21,7 +21,7 @@ class DatabaseFeatures(BaseDatabaseFeatures):
     requires_literal_defaults = True
     requires_sqlparse_for_splitting = False
     supports_1000_query_parameters = False
-    supports_nullable_unique_constraints = False
+    supports_nullable_unique_constraints = True
     supports_paramstyle_pyformat = False
     supports_partially_nullable_unique_constraints = False
     supports_regex_backreferencing = False

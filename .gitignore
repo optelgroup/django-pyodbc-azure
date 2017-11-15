@@ -1,10 +1,17 @@
-*.py[co]
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+
+# PyCharm
+.idea
+
+# Distribution / packaging
+build/
+
+# Library
 *.sw[a-z]
 *.orig
 *~
 .DS_Store
 Thumbs.db
-
 *.egg-info
-
-tests/local_settings.py
