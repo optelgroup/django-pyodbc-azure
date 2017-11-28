@@ -34,7 +34,7 @@ pipeline {
             }
             steps {
                 script {
-                    bat "pip install devpi-client wheel && devpi.exe use ${env.SERVER_ADDRESS} && devpi.exe login ${env.SERVER_CRED_USR} --password ${env.SERVER_CRED_PSW} && devpi.exe upload --formats bdist_wheel"
+                    bat "pip install devpi-client wheel && devpi.exe use ${env.SERVER_ADDRESS} && devpi.exe login ${env.SERVER_CRED_USR} --password ${env.SERVER_CRED_PSW} && devpi.exe use /${env.SERVER_CRED_USR}/release && devpi.exe upload --formats bdist_wheel"
 
                     // echo pip install -i "buildmachine/release" --extra-index-url "%server_address%" [PACKAGE_NAME]
                 }
