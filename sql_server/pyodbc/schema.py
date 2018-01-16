@@ -50,6 +50,8 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
     sql_delete_table = "DROP TABLE %(table)s"
     sql_rename_column = "EXEC sp_rename '%(table)s.%(old_column)s', %(new_column)s, 'COLUMN'"
     sql_rename_table = "EXEC sp_rename %(old_table)s, %(new_table)s"
+    sql_create_unique_null = "CREATE UNIQUE INDEX %(name)s ON %(table)s(%(columns)s) " \
+                             "WHERE %(columns)s IS NOT NULL"
 
     def _alter_column_type_sql(self, table, old_field, new_field, new_type):
         new_type = self._set_field_new_type_null_status(old_field, new_type)
@@ -272,9 +274,13 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
         if post_actions:
             for sql, params in post_actions:
                 self.execute(sql, params)
-        # Added a unique?
         if not old_field.unique and new_field.unique:
-            self.execute(self._create_unique_sql(model, [new_field.column]))
+            if new_field.null:
+                self.execute(
+                    self._create_index_sql(model, [new_field], sql=self.sql_create_unique_null, suffix="_uniq")
+                )
+            else:
+                self.execute(self._create_unique_sql(model, [new_field.column]))
         # Added an index?
         # constraint will no longer be used in lieu of an index. The following
         # lines from the truth table show all True cases; the rest are False:
@@ -463,6 +469,10 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
         # It might not actually have a column behind it
         if definition is None:
             return
+        if field.null and field.unique:
+            definition = definition.replace(' UNIQUE', '')
+            self.deferred_sql.append(
+                self._create_index_sql(model, [field], sql=self.sql_create_unique_null, suffix="_uniq"))
         # Check constraints can go on the column SQL here
         db_params = field.db_parameters(connection=self.connection)
         if db_params['check']:
@@ -517,6 +527,10 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
             definition, extra_params = self.column_sql(model, field)
             if definition is None:
                 continue
+            if field.null and field.unique:
+                definition = definition.replace(' UNIQUE', '')
+                self.deferred_sql.append(self._create_index_sql(
+                    model, [field], sql=self.sql_create_unique_null, suffix="_uniq"))
             # Check constraints can go on the column SQL here
             db_params = field.db_parameters(connection=self.connection)
             if db_params['check']:
