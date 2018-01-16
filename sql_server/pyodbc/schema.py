@@ -204,6 +204,11 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
                     # is to look at its name (refs #28053).
                     continue
                 self.execute(self._delete_constraint_sql(self.sql_delete_index, model, index_name))
+        # Drop any unique nullable index/constraints, we'll remake them later if need be
+        if old_field.unique and old_field.null:
+            index_names = self._constraint_names(model, [old_field.column], unique=True, index=True)
+            for index_name in index_names:
+                self.execute(self._delete_constraint_sql(self.sql_delete_index, model, index_name))
         # Change check constraints?
         if old_db_params['check'] != new_db_params['check'] and old_db_params['check']:
             constraint_names = self._constraint_names(model, [old_field.column], check=True)
@@ -309,12 +314,12 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
         if post_actions:
             for sql, params in post_actions:
                 self.execute(sql, params)
-        if not old_field.unique and new_field.unique:
+        if new_field.unique:
             if new_field.null:
                 self.execute(
                     self._create_index_sql(model, [new_field], sql=self.sql_create_unique_null, suffix="_uniq")
                 )
-            else:
+            elif not old_field.unique:
                 self.execute(self._create_unique_sql(model, [new_field.column]))
         # Added an index?
         # constraint will no longer be used in lieu of an index. The following
@@ -723,7 +728,7 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
                 })
         # Drop unique constraints, SQL Server requires explicit deletion
         for name, infodict in constraints.items():
-            if field.column in infodict['columns'] and infodict['unique'] and not infodict['primary_key']:
+            if field.column in infodict['columns'] and infodict['unique'] and not infodict['primary_key'] and not infodict['index']:
                 self.execute(self.sql_delete_unique % {
                     "table": self.quote_name(model._meta.db_table),
                     "name": self.quote_name(name),
