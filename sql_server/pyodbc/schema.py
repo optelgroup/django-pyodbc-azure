@@ -4,6 +4,7 @@ import datetime
 from django.db.backends.base.schema import (
     BaseDatabaseSchemaEditor, logger, _related_non_m2m_objects,
 )
+from django.db.models import Index
 from django.db.models.fields import AutoField, BigAutoField
 from django.db.models.fields.related import ManyToManyField
 from django.db.transaction import TransactionManagementError
@@ -66,6 +67,12 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
         # Drop any FK constraints, we'll remake them later
         fks_dropped = set()
         if old_field.remote_field and old_field.db_constraint:
+            # Drop index, SQL Server requires explicit deletion
+            if not new_field.db_constraint:
+                index_names = self._constraint_names(model, [old_field.column], index=True)
+                for index_name in index_names:
+                    self.execute(self._delete_constraint_sql(self.sql_delete_index, model, index_name))
+
             fk_names = self._constraint_names(model, [old_field.column], foreign_key=True)
             if strict and len(fk_names) != 1:
                 raise ValueError("Found wrong number (%s) of foreign key constraints for %s.%s" % (
@@ -88,9 +95,15 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
                 ))
             for constraint_name in constraint_names:
                 self.execute(self._delete_constraint_sql(self.sql_delete_unique, model, constraint_name))
-        # Drop incoming FK constraints if we're a primary key and things are going
-        # to change.
-        if old_field.primary_key and new_field.primary_key and old_type != new_type:
+        # Drop incoming FK constraints if the field is a primary key or unique,
+        # which might be a to_field target, and things are going to change.
+        drop_foreign_keys = (
+            (
+                (old_field.primary_key and new_field.primary_key) or
+                (old_field.unique and new_field.unique)
+            ) and old_type != new_type
+        )
+        if drop_foreign_keys:
             # '_meta.related_field' also contains M2M reverse fields, these
             # will be filtered out
             for _old_rel, new_rel in _related_non_m2m_objects(old_field, new_field):
@@ -111,8 +124,16 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
         # True               | False            | True               | True
         if old_field.db_index and not old_field.unique and (not new_field.db_index or new_field.unique):
             # Find the index for this field
-            index_names = self._constraint_names(model, [old_field.column], index=True)
+            meta_index_names = {index.name for index in model._meta.indexes}
+            # Retrieve only BTREE indexes since this is what's created with
+            # db_index=True.
+            index_names = self._constraint_names(model, [old_field.column], index=True, type_=Index.suffix)
             for index_name in index_names:
+                if index_name in meta_index_names:
+                    # The only way to check if an index was created with
+                    # db_index=True or with Index(['field'], name='foo')
+                    # is to look at its name (refs #28053).
+                    continue
                 self.execute(self._delete_constraint_sql(self.sql_delete_index, model, index_name))
         # Change check constraints?
         if old_db_params['check'] != new_db_params['check'] and old_db_params['check']:
@@ -339,9 +360,9 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
                 new_field.db_constraint):
             self.execute(self._create_fk_sql(model, new_field, "_fk_%(to_table)s_%(to_column)s"))
         # Rebuild FKs that pointed to us if we previously had to drop them
-        if old_field.primary_key and new_field.primary_key and old_type != new_type:
+        if drop_foreign_keys:
             for rel in new_field.model._meta.related_objects:
-                if not rel.many_to_many:
+                if not rel.many_to_many and rel.field.db_constraint:
                     self.execute(self._create_fk_sql(rel.related_model, rel.field, "_fk"))
         # Does it have check constraints we need to add?
         if old_db_params['check'] != new_db_params['check'] and new_db_params['check']:
@@ -470,6 +491,7 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
                         "table": self.quote_name(model._meta.db_table),
                         "changes": self.sql_alter_column_no_default % {
                             "column": self.quote_name(next(iter(row))),
+                            "type": db_params['type'],
                         }
                     }
                     self.execute(sql)

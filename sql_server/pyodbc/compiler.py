@@ -1,7 +1,7 @@
 from itertools import chain
 
 from django.db.models.aggregates import Avg, Count, StdDev, Variance
-from django.db.models.expressions import OrderBy, Ref, Value
+from django.db.models.expressions import Exists, OrderBy, Ref, Value
 from django.db.models.functions import ConcatPair, Greatest, Least, Length, Substr
 from django.db.models.sql import compiler
 from django.db.transaction import TransactionManagementError
@@ -38,6 +38,14 @@ def _as_sql_least(self, compiler, connection):
 
 def _as_sql_length(self, compiler, connection):
     return self.as_sql(compiler, connection, function='LEN')
+
+def _as_sql_exists(self, compiler, connection, template=None, **extra_context):
+    # MS SQL doesn't allow EXISTS() in the SELECT list, so wrap it with a
+    # CASE WHEN expression. Change the template since the When expression
+    # requires a left hand side (column) to compare against.
+    sql, params = self.as_sql(compiler, connection, template, **extra_context)
+    sql = 'CASE WHEN {} THEN 1 ELSE 0 END'.format(sql)
+    return sql, params
 
 def _as_sql_order_by(self, compiler, connection):
     template = None
@@ -78,6 +86,9 @@ class SQLCompiler(compiler.SQLCompiler):
         refcounts_before = self.query.alias_refcount.copy()
         try:
             extra_select, order_by, group_by = self.pre_sql_setup()
+            for_update_part = None
+            combinator = self.query.combinator
+            features = self.connection.features
 
             # The do_offset flag indicates whether we need to construct
             # the SQL needed to use limit/offset w/SQL Server.
@@ -89,23 +100,17 @@ class SQLCompiler(compiler.SQLCompiler):
             supports_offset_clause = self.connection.sql_server_version >= 2012
             do_offset_emulation = do_offset and not supports_offset_clause
 
-            distinct_fields = self.get_distinct()
-
-            # This must come after 'select', 'ordering', and 'distinct' -- see
-            # docstring of get_from_clause() for details.
-            from_, f_params = self.get_from_clause()
-
-            for_update_part = None
-            where, w_params = self.compile(self.where) if self.where is not None else ("", [])
-            having, h_params = self.compile(self.having) if self.having is not None else ("", [])
-
-            combinator = self.query.combinator
-            features = self.connection.features
             if combinator:
                 if not getattr(features, 'supports_select_{}'.format(combinator)):
                     raise DatabaseError('{} not supported on this database backend.'.format(combinator))
                 result, params = self.get_combinator_sql(combinator, self.query.combinator_all)
             else:
+                distinct_fields = self.get_distinct()
+                # This must come after 'select', 'ordering', and 'distinct' -- see
+                # docstring of get_from_clause() for details.
+                from_, f_params = self.get_from_clause()
+                where, w_params = self.compile(self.where) if self.where is not None else ("", [])
+                having, h_params = self.compile(self.having) if self.having is not None else ("", [])
                 params = []
                 result = ['SELECT']
     
@@ -246,6 +251,8 @@ class SQLCompiler(compiler.SQLCompiler):
             as_microsoft = _as_sql_least
         elif isinstance(node, Length):
             as_microsoft = _as_sql_length
+        elif isinstance(node, Exists):
+            as_microsoft = _as_sql_exists
         elif isinstance(node, OrderBy):
             as_microsoft = _as_sql_order_by
         elif isinstance(node, StdDev):

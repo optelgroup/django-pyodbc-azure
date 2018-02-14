@@ -7,18 +7,18 @@ django-pyodbc-azure
 .. image:: http://img.shields.io/pypi/l/django-pyodbc-azure.svg?style=flat
     :target: http://opensource.org/licenses/BSD-3-Clause
 
-*django-pyodbc-azure* is a refined fork of
-`django-pyodbc <https://github.com/avidal/django-pyodbc>`__, a
-`Django <http://djangoproject.com/>`__ Microsoft SQL Server external
+*django-pyodbc-azure* is a modern fork of
+`django-pyodbc <https://code.google.com/archive/p/django-pyodbc/>`__, a
+`Django <https://www.djangoproject.com/>`__ Microsoft SQL Server external
 DB backend that uses ODBC by employing the
-`pyodbc <https://code.google.com/p/pyodbc/>`__ library. It supports
+`pyodbc <https://github.com/mkleehammer/pyodbc>`__ library. It supports
 Microsoft SQL Server and Azure SQL Database.
 
 Features
 --------
 
--  Supports Django 1.11.0
--  Supports Microsoft SQL Server 2005, 2008/2008R2, 2012, 2014, 2016 and
+-  Supports Django 1.11.9
+-  Supports Microsoft SQL Server 2005, 2008/2008R2, 2012, 2014, 2016, 2017 and
    Azure SQL Database
 -  Supports LIMIT+OFFSET and offset w/o LIMIT emulation.
 -  Passes most of the tests of the Django test suite.
@@ -31,7 +31,7 @@ Features
 Dependencies
 ------------
 
--  Django 1.11.0
+-  Django 1.11.9
 -  pyodbc 3.0 or newer
 
 Installation
@@ -128,6 +128,16 @@ Dictionary. Current available keys are:
    See http://msdn.microsoft.com/en-us/library/ms130892.aspx. Default is
    ``"SQL Server"`` on Windows and ``"FreeTDS"`` on other platforms.
 
+-  isolation_level
+
+   String. Sets `transaction isolation level
+   <https://docs.microsoft.com/en-us/sql/t-sql/statements/set-transaction-isolation-level-transact-sql>`__
+   for each database session. Valid values for this entry are
+   ``READ UNCOMMITTED``, ``READ COMMITTED``, ``REPEATABLE READ``,
+   ``SNAPSHOT``, and ``SERIALIZABLE``. Default is ``None`` which means
+   no isolation levei is set to a database session and SQL Server default
+   will be used.
+
 -  dsn
 
    String. A named DSN can be used instead of ``HOST``.
@@ -193,6 +203,11 @@ Dictionary. Current available keys are:
    Integer. Sets the back off time in seconds for reries of
    the database connection process. Default value is ``5``.
 
+-  query_timeout
+
+   Integer. Sets the timeout in seconds for the database query.
+   Default value is ``0`` which disables the timeout.
+
 backend-specific settings
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -234,7 +249,6 @@ Limitations
 The following features are currently not supported:
 
 - Altering a model field from or to AutoField at migration
-- `Exists <https://docs.djangoproject.com/en/1.11/ref/models/expressions/#django.db.models.Exists>`__ subqueries
 
 Notice
 ------
@@ -245,18 +259,3 @@ specify an appropriate version number (1.10.x.x for Django 1.10)
 at installation like this: ::
 
     pip install "django-pyodbc-azure<1.11"
-
-License
--------
-
-New BSD LICENSE
-
-Credits
--------
-
--  `Ramiro Morales <https://people.djangoproject.com/ramiro/>`__
--  `Filip Wasilewski <http://code.djangoproject.com/ticket/5246>`__
--  `Wei guangjing <https://people.djangoproject.com/vcc/>`__
--  `mamcx <http://code.djangoproject.com/ticket/5062>`__
--  `Alex Vidal <http://github.com/avidal/>`__
--  `Michiya Takahashi <http://github.com/michiya/>`__
