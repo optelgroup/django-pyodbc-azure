@@ -296,16 +296,19 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
         # queries and generate their own placeholders. Doing that isn't
         # necessary and it should be possible to use placeholders and
         # expressions in bulk inserts too.
-        can_bulk = (not self.return_id and self.connection.features.has_bulk_insert) and has_fields
+        can_bulk = self.connection.features.has_bulk_insert and has_fields
+        if self.connection.features.can_return_ids_from_bulk_insert:
+            result.append("OUTPUT INSERTED.id")
 
         placeholder_rows, param_rows = self.assemble_as_sql(fields, value_rows)
 
-        if self.return_id and self.connection.features.can_return_id_from_insert:
-            result.insert(0, 'SET NOCOUNT ON')
-            result.append((values_format + ';') % ', '.join(placeholder_rows[0]))
-            params = [param_rows[0]]
-            result.append('SELECT CAST(SCOPE_IDENTITY() AS bigint)')
-            return [(" ".join(result), tuple(chain.from_iterable(params)))]
+        if not can_bulk:
+            if self.return_id and self.connection.features.can_return_id_from_insert:
+                result.insert(0, 'SET NOCOUNT ON')
+                result.append((values_format + ';') % ', '.join(placeholder_rows[0]))
+                params = [param_rows[0]]
+                result.append('SELECT CAST(SCOPE_IDENTITY() AS bigint)')
+                return [(" ".join(result), tuple(chain.from_iterable(params)))]
 
         if can_bulk:
             result.append(self.connection.ops.bulk_insert_sql(fields, placeholder_rows))
