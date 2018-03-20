@@ -297,8 +297,11 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
         # necessary and it should be possible to use placeholders and
         # expressions in bulk inserts too.
         can_bulk = self.connection.features.has_bulk_insert and has_fields
+
         if self.connection.features.can_return_ids_from_bulk_insert:
-            result.append("OUTPUT INSERTED.id")
+            meta = self.query.get_meta()
+            qn = self.quote_name_unless_alias
+            result.append("OUTPUT INSERTED.%s" % qn(meta.pk.db_column or meta.pk.column))
 
         placeholder_rows, param_rows = self.assemble_as_sql(fields, value_rows)
 
