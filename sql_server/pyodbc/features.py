@@ -18,6 +18,7 @@ class DatabaseFeatures(BaseDatabaseFeatures):
     has_real_datatype = True
     has_select_for_update = True
     has_select_for_update_nowait = True
+    has_select_for_update_skip_locked = True
     has_zoneinfo_database = pytz is not None
     ignores_table_name_case = True
     ignores_quoted_identifier_case = True

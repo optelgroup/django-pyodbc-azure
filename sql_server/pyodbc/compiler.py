@@ -314,6 +314,7 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
                 return [(" ".join(result), tuple(chain.from_iterable(params)))]
 
         if can_bulk:
+            result.insert(0, 'SET NOCOUNT ON')
             result.append(self.connection.ops.bulk_insert_sql(fields, placeholder_rows))
             sql = [(" ".join(result), tuple(p for ps in param_rows for p in ps))]
         else:
