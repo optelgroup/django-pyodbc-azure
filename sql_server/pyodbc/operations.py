@@ -227,7 +227,6 @@ class DatabaseOperations(BaseDatabaseOperations):
         statement into a table that has an auto-incrementing ID, returns the
         newly created ID.
         """
-        cursor.nextset()
         return cursor.fetchone()[0]
 
     def fetch_returned_insert_ids(self, cursor):
@@ -236,7 +235,7 @@ class DatabaseOperations(BaseDatabaseOperations):
         statement into a table that has an auto-incrementing ID, return the
         list of newly created IDs.
         """
-        ids = []
+        ids = [cursor.fetchone()[0]]
         while cursor.nextset():
             ids.append(cursor.fetchone()[0])
         return ids

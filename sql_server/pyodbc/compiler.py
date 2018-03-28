@@ -274,6 +274,7 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
                       in fields]]
         placeholder_rows, param_rows = self.assemble_as_sql(fields, value_rows)
         sql_ = [
+            'SET NOCOUNT ON',
             'INSERT INTO %s' % qn(opts.db_table),
             '(%s)' % ', '.join(qn(f.column) for f in fields),
             'VALUES (%s);' % ', '.join(placeholder_rows[0])
@@ -288,6 +289,7 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
         value_rows = [[self.connection.ops.pk_default_value()]]
         placeholder_rows, param_rows = self.assemble_as_sql(fields, value_rows)
         sql_ = [
+            'SET NOCOUNT ON',
             'INSERT INTO %s' % qn(opts.db_table),
             '(%s)' % ', '.join(qn(f.column) for f in fields),
             'VALUES (%s);' % ', '.join(placeholder_rows[0])
@@ -316,7 +318,6 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
                     id_insert_sql = []
                     table = qn(opts.db_table)
                     sql_format = (
-                        'SET NOCOUNT ON;'
                         'SET IDENTITY_INSERT %s ON; '
                         '%s; '
                         'SET IDENTITY_INSERT %s OFF')
@@ -351,6 +352,7 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
             return self.connection.ops.last_insert_id(
                 cursor, self.query.get_meta().db_table, self.query.get_meta().pk.column
             )
+
 
 class SQLDeleteCompiler(compiler.SQLDeleteCompiler, SQLCompiler):
     def as_sql(self):
