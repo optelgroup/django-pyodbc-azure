@@ -322,7 +322,7 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
                         '%s; '
                         'SET IDENTITY_INSERT %s OFF')
                     for q, p in sql:
-                        id_insert_sql.append((sql_format % (table, ''.join(q), table), p))
+                        id_insert_sql.append((sql_format % (table, q, table), p))
                     sql = id_insert_sql
 
         return sql
