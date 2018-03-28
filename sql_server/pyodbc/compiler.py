@@ -277,12 +277,11 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
             'SET NOCOUNT ON',
             'INSERT INTO %s' % qn(opts.db_table),
             '(%s)' % ', '.join(qn(f.column) for f in fields),
-            'VALUES (%s);' % ', '.join(placeholder_rows[0])
+            'VALUES (%s);' % ', '.join(placeholder_rows[0]),
+            'SELECT CAST(SCOPE_IDENTITY() AS bigint);'
         ]
-        params = [param_rows[0]]
-        sql_.append('SELECT CAST(SCOPE_IDENTITY() AS bigint);')
 
-        return " ".join(sql_), tuple(chain.from_iterable(params))
+        return " ".join(sql_), tuple(chain.from_iterable([param_rows[0]]))
 
     def wrap_empty_object(self, opts, qn, obj):
         fields = [None]
@@ -292,12 +291,11 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
             'SET NOCOUNT ON',
             'INSERT INTO %s' % qn(opts.db_table),
             '(%s)' % ', '.join(qn(f.column) for f in fields),
-            'VALUES (%s);' % ', '.join(placeholder_rows[0])
+            'VALUES (%s);' % ', '.join(placeholder_rows[0]),
+            'SELECT CAST(SCOPE_IDENTITY() AS bigint);'
         ]
-        params = [param_rows[0]]
-        sql_.append('SELECT CAST(SCOPE_IDENTITY() AS bigint);')
 
-        return " ".join(sql_), tuple(chain.from_iterable(params))
+        return " ".join(sql_), tuple(chain.from_iterable([param_rows[0]]))
 
     def as_sql(self):
         qn = self.connection.ops.quote_name
