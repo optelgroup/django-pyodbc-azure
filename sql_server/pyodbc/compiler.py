@@ -336,12 +336,14 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
             ids = []
             for sql, params in self.as_sql():
                 cursor.execute(sql, params)
-                if not (return_id and cursor):
-                    return
                 if self.connection.features.can_return_ids_from_bulk_insert and len(self.query.objs) > 1:
                     ids.extend(self.connection.ops.fetch_returned_insert_ids(cursor))
-                if self.connection.features.can_return_id_from_insert and len(self.query.objs) == 1:
-                    return self.connection.ops.fetch_returned_insert_id(cursor)
+
+            if not (return_id and cursor):
+                return
+
+            if self.connection.features.can_return_id_from_insert and len(self.query.objs) == 1:
+                return self.connection.ops.fetch_returned_insert_id(cursor)
 
             if ids:
                 return ids
