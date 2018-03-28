@@ -268,60 +268,44 @@ class SQLCompiler(compiler.SQLCompiler):
 
 
 class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
+    def wrap_object(self, opts, qn, obj):
+        fields = self.query.fields
+        value_rows = [[self.prepare_value(field, self.pre_save_val(field, obj)) for field
+                      in fields]]
+        placeholder_rows, param_rows = self.assemble_as_sql(fields, value_rows)
+        sql_ = [
+            'INSERT INTO %s' % qn(opts.db_table),
+            '(%s)' % ', '.join(qn(f.column) for f in fields),
+            'VALUES (%s);' % ', '.join(placeholder_rows[0])
+        ]
+        params = [param_rows[0]]
+        sql_.append('SELECT CAST(SCOPE_IDENTITY() AS bigint);')
+
+        return " ".join(sql_), tuple(chain.from_iterable(params))
+
+    def wrap_empty_object(self, opts, qn, obj):
+        fields = [None]
+        value_rows = [[self.connection.ops.pk_default_value()]]
+        placeholder_rows, param_rows = self.assemble_as_sql(fields, value_rows)
+        sql_ = [
+            'INSERT INTO %s' % qn(opts.db_table),
+            '(%s)' % ', '.join(qn(f.column) for f in fields),
+            'VALUES (%s);' % ', '.join(placeholder_rows[0])
+        ]
+        params = [param_rows[0]]
+        sql_.append('SELECT CAST(SCOPE_IDENTITY() AS bigint);')
+
+        return " ".join(sql_), tuple(chain.from_iterable(params))
 
     def as_sql(self):
-        # We don't need quote_name_unless_alias() here, since these are all
-        # going to be column names (so we can avoid the extra overhead).
         qn = self.connection.ops.quote_name
         opts = self.query.get_meta()
-        result = ['INSERT INTO %s' % qn(opts.db_table)]
-
         has_fields = bool(self.query.fields)
-
         if has_fields:
             fields = self.query.fields
-            result.append('(%s)' % ', '.join(qn(f.column) for f in fields))
-            values_format = 'VALUES (%s)'
-            value_rows = [
-                [self.prepare_value(field, self.pre_save_val(field, obj)) for field in fields]
-                for obj in self.query.objs
-            ]
+            sql = [self.wrap_object(opts, qn, obj) for obj in self.query.objs]
         else:
-            values_format = '%s VALUES'
-            # An empty object.
-            value_rows = [[self.connection.ops.pk_default_value()] for _ in self.query.objs]
-            fields = [None]
-
-        # Currently the backends just accept values when generating bulk
-        # queries and generate their own placeholders. Doing that isn't
-        # necessary and it should be possible to use placeholders and
-        # expressions in bulk inserts too.
-        can_bulk = self.connection.features.has_bulk_insert and has_fields
-
-        if self.connection.features.can_return_ids_from_bulk_insert:
-            meta = self.query.get_meta()
-            qn = self.quote_name_unless_alias
-            result.append("OUTPUT INSERTED.%s" % qn(meta.pk.db_column or meta.pk.column))
-
-        placeholder_rows, param_rows = self.assemble_as_sql(fields, value_rows)
-
-        if not can_bulk:
-            if self.return_id and self.connection.features.can_return_id_from_insert:
-                result.insert(0, 'SET NOCOUNT ON')
-                result.append((values_format + ';') % ', '.join(placeholder_rows[0]))
-                params = [param_rows[0]]
-                result.append('SELECT CAST(SCOPE_IDENTITY() AS bigint)')
-                return [(" ".join(result), tuple(chain.from_iterable(params)))]
-
-        if can_bulk:
-            result.insert(0, 'SET NOCOUNT ON')
-            result.append(self.connection.ops.bulk_insert_sql(fields, placeholder_rows))
-            sql = [(" ".join(result), tuple(p for ps in param_rows for p in ps))]
-        else:
-            sql = [
-                (" ".join(result + [values_format % ", ".join(p)]), vals)
-                for p, vals in zip(placeholder_rows, param_rows)
-            ]
+            sql = [self.wrap_empty_object(opts, qn, obj) for obj in self.query.objs]
 
         if has_fields:
             if opts.auto_field is not None:
@@ -331,13 +315,40 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
                 if auto_field_column in columns:
                     id_insert_sql = []
                     table = qn(opts.db_table)
-                    sql_format = 'SET IDENTITY_INSERT %s ON; %s; SET IDENTITY_INSERT %s OFF'
+                    sql_format = (
+                        'SET NOCOUNT ON;'
+                        'SET IDENTITY_INSERT %s ON; '
+                        '%s; '
+                        'SET IDENTITY_INSERT %s OFF')
                     for q, p in sql:
-                        id_insert_sql.append((sql_format % (table, q, table), p))
+                        id_insert_sql.append((sql_format % (table, ''.join(q), table), p))
                     sql = id_insert_sql
 
         return sql
 
+    def execute_sql(self, return_id=False):
+        assert not (
+            return_id and len(self.query.objs) != 1 and
+            not self.connection.features.can_return_ids_from_bulk_insert
+        )
+        self.return_id = return_id
+        with self.connection.cursor() as cursor:
+            ids = []
+            for sql, params in self.as_sql():
+                cursor.execute(sql, params)
+                if not (return_id and cursor):
+                    return
+                if self.connection.features.can_return_ids_from_bulk_insert and len(self.query.objs) > 1:
+                    ids.extend(self.connection.ops.fetch_returned_insert_ids(cursor))
+                if self.connection.features.can_return_id_from_insert and len(self.query.objs) == 1:
+                    return self.connection.ops.fetch_returned_insert_id(cursor)
+
+            if ids:
+                return ids
+
+            return self.connection.ops.last_insert_id(
+                cursor, self.query.get_meta().db_table, self.query.get_meta().pk.column
+            )
 
 class SQLDeleteCompiler(compiler.SQLDeleteCompiler, SQLCompiler):
     def as_sql(self):

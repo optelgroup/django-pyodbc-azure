@@ -221,13 +221,25 @@ class DatabaseOperations(BaseDatabaseOperations):
             sql = "CONVERT(datetime, CONVERT(varchar, %s, 20))" % field_name
         return sql, params
 
+    def fetch_returned_insert_id(self, cursor):
+        """
+        Given a cursor object that has just performed an INSERT...RETURNING
+        statement into a table that has an auto-incrementing ID, returns the
+        newly created ID.
+        """
+        cursor.nextset()
+        return cursor.fetchone()[0]
+
     def fetch_returned_insert_ids(self, cursor):
         """
         Given a cursor object that has just performed an INSERT...RETURNING
         statement into a table that has an auto-incrementing ID, return the
         list of newly created IDs.
         """
-        return [item[0] for item in cursor.fetchall()]
+        ids = []
+        while cursor.nextset():
+            ids.append(cursor.fetchone()[0])
+        return ids
 
     def for_update_sql(self, nowait=False, skip_locked=False):
         """
