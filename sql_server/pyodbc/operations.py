@@ -157,7 +157,9 @@ class DatabaseOperations(BaseDatabaseOperations):
         the SQL that extracts a value from the given date field field_name.
         """
         if lookup_type == 'week_day':
-            return "DATEPART(dw, %s)" % field_name
+            return "DATEPART(weekday, %s)" % field_name
+        elif lookup_type == 'week' and self.connection.sql_server_version >= 2008:
+            return "DATEPART(iso_week, %s)" % field_name
         else:
             return "DATEPART(%s, %s)" % (lookup_type, field_name)
 
@@ -490,6 +492,8 @@ class DatabaseOperations(BaseDatabaseOperations):
                 value = datetime.datetime(*(time.strptime(value, '%H:%M:%S')[:6]))
             else:
                 value = datetime.datetime(1900, 1, 1, value.hour, value.minute, value.second)
+        else:
+            value = super(DatabaseOperations, self).adapt_timefield_value(value)
         return value
 
     def time_trunc_sql(self, lookup_type, field_name):

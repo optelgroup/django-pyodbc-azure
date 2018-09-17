@@ -1,8 +1,3 @@
-try:
-    import pytz
-except ImportError:
-    pytz = None
-
 from django.db.backends.base.features import BaseDatabaseFeatures
 
 
@@ -13,11 +8,13 @@ class DatabaseFeatures(BaseDatabaseFeatures):
     can_return_id_from_insert = True
     can_use_chunked_reads = False
     for_update_after_from = True
+    greatest_least_ignores_nulls = True
     has_bulk_insert = True
     has_real_datatype = True
     has_select_for_update = True
     has_select_for_update_nowait = True
-    has_zoneinfo_database = pytz is not None
+    has_select_for_update_skip_locked = True
+    has_zoneinfo_database = False
     ignores_table_name_case = True
     ignores_quoted_identifier_case = True
     requires_literal_defaults = True

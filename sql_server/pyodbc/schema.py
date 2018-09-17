@@ -2,7 +2,7 @@ import binascii
 import datetime
 
 from django.db.backends.base.schema import (
-    BaseDatabaseSchemaEditor, logger, _related_non_m2m_objects,
+    BaseDatabaseSchemaEditor, logger, _is_relevant_relation, _related_non_m2m_objects,
 )
 from django.db.models import Index
 from django.db.models.fields import AutoField, BigAutoField
@@ -136,7 +136,11 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
                     continue
                 self.execute(self._delete_constraint_sql(self.sql_delete_index, model, index_name))
         # Change check constraints?
-        if old_db_params['check'] != new_db_params['check'] and old_db_params['check']:
+        if (old_db_params['check'] != new_db_params['check'] and old_db_params['check']) or (
+            # SQL Server requires explicit deletion befor altering column type with the same constraint
+            old_db_params['check'] == new_db_params['check'] and old_db_params['check'] and
+            old_db_params['type'] != new_db_params['type']
+        ):
             constraint_names = self._constraint_names(model, [old_field.column], check=True)
             if strict and len(constraint_names) != 1:
                 raise ValueError("Found wrong number (%s) of check constraints for %s.%s" % (
@@ -273,7 +277,9 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
             for sql, params in post_actions:
                 self.execute(sql, params)
         # Added a unique?
-        if not old_field.unique and new_field.unique:
+        if (not old_field.unique and new_field.unique) or (
+            old_field.primary_key and not new_field.primary_key and new_field.unique
+        ):
             self.execute(self._create_unique_sql(model, [new_field.column]))
         # Added an index?
         # constraint will no longer be used in lieu of an index. The following
@@ -362,10 +368,14 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
         # Rebuild FKs that pointed to us if we previously had to drop them
         if drop_foreign_keys:
             for rel in new_field.model._meta.related_objects:
-                if not rel.many_to_many and rel.field.db_constraint:
+                if _is_relevant_relation(rel, new_field) and rel.field.db_constraint:
                     self.execute(self._create_fk_sql(rel.related_model, rel.field, "_fk"))
         # Does it have check constraints we need to add?
-        if old_db_params['check'] != new_db_params['check'] and new_db_params['check']:
+        if (old_db_params['check'] != new_db_params['check'] and new_db_params['check']) or (
+            # SQL Server requires explicit creation after altering column type with the same constraint
+            old_db_params['check'] == new_db_params['check'] and new_db_params['check'] and
+            old_db_params['type'] != new_db_params['type']
+        ):
             self.execute(
                 self.sql_create_check % {
                     "table": self.quote_name(model._meta.db_table),
